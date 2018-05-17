@@ -1,0 +1,113 @@
+{
+  "AWSTemplateFormatVersion":"2010-09-09",
+  "Description":"UA CloudFormation Sample Template: Create a single webserver with an existing ssh key inside a default security group",
+
+  "Parameters":{
+    "KeyName":{
+      "Description":"Name of an existing EC2 KeyPair to ssh",
+      "Type":"AWS::EC2::KeyPair::KeyName"
+    },
+    "DBPassword":{
+      "Description":"Password MySql for the root user in RDS",
+      "Type":"String"
+    }
+  },
+
+  "Resources":{
+    "EC2Instance1":{
+      "Type": "AWS::EC2::Instance",
+      "Properties":{
+        "ImageId":"ami-402f1a33",
+        "InstanceType":"t2.micro",
+        "SecurityGroups":[
+          {"Ref":"WebServerSecurityGroup"}
+        ],
+        "Tags":[
+            {"Key":"Name","Value":{"Fn::Join":["",[{"Ref":"AWS::StackName"},"-Web01"]]}}
+          ],
+          "KeyName":{"Ref":"KeyName"}
+      }
+    },
+    "EC2Instance2":{
+      "Type":"AWS::EC2::Instance",
+      "Properties":{
+        "ImageId":"ami-402f1a33",
+        "InstanceType":"t2.micro",
+        "SecurityGroups":[
+          {"Ref":"WebServerSecurityGroup"}
+        ],
+        "Tags":[
+            {"Key":"Name","Value":{"Fn::Join":["",[{"Ref":"AWS::StackName"},"-Web02"]]}}
+        ],
+        "KeyName":{"Ref":"KeyName"}
+      }
+    },
+    "ClassicELB":{
+      "Type":"AWS::ElasticLoadBalancing::LoadBalancer",
+      "Properties":{
+        "Instances":[{"Ref":"EC2Instance1"},{"Ref":"EC2Instance2"}],
+        "AvailabilityZones": { "Fn::GetAZs": "" },
+        "Listeners":[{
+          "LoadBalancerPort":"80",
+          "InstancePort":"80",
+          "Protocol" : "HTTP",
+          "InstanceProtocol": "HTTP"
+        }],
+        "HealthCheck":{
+          "Target":"TCP:80",
+          "HealthyThreshold":"3",
+          "UnhealthyThreshold":"5",
+          "Interval":"30",
+          "Timeout":"5"
+        },
+        "Tags":[
+              {"Key":"Name","Value":{"Fn::Join":["",[{"Ref":"AWS::StackName"},"-ELB"]]}}
+        ]
+      }
+    },
+    "RDSinstance":{
+      "Type":"AWS::RDS::DBInstance",
+      "Properties":{
+        "DBName":{"Fn::Join":["_",[{"Ref":"AWS::StackName"},"liveDB"]]},
+        "AllocatedStorage":"8",
+        "DBInstanceClass":"db.t2.micro",
+        "DBInstanceIdentifier":{"Fn::Join":["-",[{"Ref":"AWS::StackName"},"RDS01"]]},
+        "Engine":"MySQL",
+        "EngineVersion":"5.7",
+        "MasterUsername":"root",
+        "MasterUserPassword":{"Ref":"DBPassword"},
+        "PubliclyAccessible":"false",
+        "DBSecurityGroups":[
+            {"Ref":"RDSaccess"}
+          ],
+        "Tags":[
+            {"Key":"Name","Value":{"Fn::Join":["",[{"Ref":"AWS::StackName"},"-RDS01"]]}}
+          ]
+      }
+    },
+    "RDSaccess":{
+      "Type":"AWS::RDS::DBSecurityGroup",
+      "Properties":{
+        "DBSecurityGroupIngress":{"EC2SecurityGroupName":{"Ref":"WebServerSecurityGroup"}},
+        "GroupDescription":"Frontend Access"
+      }
+    },
+    "WebServerSecurityGroup":{
+      "Type":"AWS::EC2::SecurityGroup",
+      "Properties":{
+        "GroupDescription":"Enable HTTP access via port 80 and SSH access",
+        "SecurityGroupIngress":[
+          {"IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0"},
+          {"IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : "0.0.0.0/0"}
+        ]
+      }
+    }
+  },
+
+  "Outputs":{
+    "StackName":{
+      "Description":"Name of the Stack just created",
+      "Value":{"Ref":"AWS::StackName"}
+     }
+  }
+}
